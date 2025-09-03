@@ -7,7 +7,7 @@ import { CalendarMode, HeaderRender } from 'antd/es/calendar/generateCalendar';
 import moment from 'moment';
 import { VNode } from 'preact';
 import momentGenerateConfig from 'rc-picker/es/generate/moment';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import './infra.css';
@@ -94,9 +94,43 @@ function DateCalendar() {
   const [date, setDate] = useState(moment().locale(i18n.language));
   const [viewMode, setViewMode] = useState<CalendarMode | undefined>('month');
   const [events, setEvents] = useState<Record<string, any[]>>({});
+  const [token, setToken] = useState<string | null>(() =>
+    localStorage.getItem('gcal_token'),
+  );
+  const tokenClientRef = useRef<any>();
 
   useEffect(() => {
-    const token = localStorage.getItem('gcal_token');
+    const onLoad = () => {
+      if (!process.env.GCAL_CLIENT_ID) {
+        return;
+      }
+      tokenClientRef.current = window.google?.accounts?.oauth2.initTokenClient({
+        client_id: process.env.GCAL_CLIENT_ID,
+        scope: 'https://www.googleapis.com/auth/calendar.readonly',
+        callback: (res: any) => {
+          const access = res.access_token as string;
+          localStorage.setItem('gcal_token', access);
+          setToken(access);
+        },
+      });
+    };
+
+    if (window.google?.accounts?.oauth2) {
+      onLoad();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.onload = onLoad;
+    document.body.appendChild(script);
+  }, []);
+
+  const handleAuth = () => {
+    tokenClientRef.current?.requestAccessToken({ prompt: 'consent' });
+  };
+
+  useEffect(() => {
     if (!token) {
       setEvents({});
       return;
@@ -133,7 +167,7 @@ function DateCalendar() {
     }
 
     fetchEvents();
-  }, [date, i18n.language]);
+  }, [token, date, i18n.language]);
 
   useEffect(() => {
     setDate(date.locale(i18n.language));
@@ -169,60 +203,68 @@ function DateCalendar() {
       prefix="calendar"
       onContextMenu={(e) => e.stopPropagation()}
     >
-      <div onWheel={onWheel}>
-        <MomentCalendar
-          value={date}
-          onChange={setDate}
-          onPanelChange={(_, mode) => setViewMode(mode)}
-          className="calendar"
-          fullscreen={false}
-          mode={viewMode}
-          headerRender={DateCalendarHeader}
-          fullCellRender={(current, info) =>
-            info.type == 'date' ? (
-              <div
-                className={cx('calendar-cell-value', {
-                  'calendar-cell-selected': current.isSame(date, 'date'),
-                  'calendar-cell-today': current.isSame(info.today, 'date'),
-                  'calendar-cell-off-month': current.month() != date.month(),
-                })}
-                onClick={() => setDate(current)}
-              >
-                {Number(current.format('DD'))}
-                {events[current.format('YYYY-MM-DD')] && (
-                  <div className="calendar-event-indicator" />
-                )}
-              </div>
-            ) : (
-              <div
-                className={cx('calendar-cell-value', 'calendar-cell-month', {
-                  'calendar-cell-today': current
-                    .startOf('month')
-                    .isSame(info.today.startOf('month'), 'date'),
-                })}
-                onClick={() => {
-                  setDate(current);
-                  setViewMode('month');
-                }}
-              >
-                {current.format('MMMM')}
-              </div>
-            )
-          }
-        />
-        {(() => {
-          const dayEvents = events[date.format('YYYY-MM-DD')] || [];
-          return (
-            dayEvents.length > 0 && (
-              <ul className="calendar-events-list">
-                {dayEvents.map((ev) => (
-                  <li key={ev.id || ev.summary}>{ev.summary}</li>
-                ))}
-              </ul>
-            )
-          );
-        })()}
-      </div>
+      {!token ? (
+        <div className="calendar-auth">
+          <button className="calendar-auth-button" onClick={handleAuth}>
+            Connect Google Calendar
+          </button>
+        </div>
+      ) : (
+        <div onWheel={onWheel}>
+          <MomentCalendar
+            value={date}
+            onChange={setDate}
+            onPanelChange={(_, mode) => setViewMode(mode)}
+            className="calendar"
+            fullscreen={false}
+            mode={viewMode}
+            headerRender={DateCalendarHeader}
+            fullCellRender={(current, info) =>
+              info.type == 'date' ? (
+                <div
+                  className={cx('calendar-cell-value', {
+                    'calendar-cell-selected': current.isSame(date, 'date'),
+                    'calendar-cell-today': current.isSame(info.today, 'date'),
+                    'calendar-cell-off-month': current.month() != date.month(),
+                  })}
+                  onClick={() => setDate(current)}
+                >
+                  {Number(current.format('DD'))}
+                  {events[current.format('YYYY-MM-DD')] && (
+                    <div className="calendar-event-indicator" />
+                  )}
+                </div>
+              ) : (
+                <div
+                  className={cx('calendar-cell-value', 'calendar-cell-month', {
+                    'calendar-cell-today': current
+                      .startOf('month')
+                      .isSame(info.today.startOf('month'), 'date'),
+                  })}
+                  onClick={() => {
+                    setDate(current);
+                    setViewMode('month');
+                  }}
+                >
+                  {current.format('MMMM')}
+                </div>
+              )
+            }
+          />
+          {(() => {
+            const dayEvents = events[date.format('YYYY-MM-DD')] || [];
+            return (
+              dayEvents.length > 0 && (
+                <ul className="calendar-events-list">
+                  {dayEvents.map((ev) => (
+                    <li key={ev.id || ev.summary}>{ev.summary}</li>
+                  ))}
+                </ul>
+              )
+            );
+          })()}
+        </div>
+      )}
     </BackgroundByLayersV2>
   );
 }

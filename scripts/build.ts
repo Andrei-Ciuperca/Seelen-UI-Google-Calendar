@@ -153,6 +153,9 @@ function startDevServer() {
     loader: {
       '.yml': 'text',
     },
+    define: {
+      'process.env.GCAL_CLIENT_ID': JSON.stringify(process.env.GCAL_CLIENT_ID || ''),
+    },
     plugins: [
       CssModulesPlugin({
         localsConvention: 'camelCase',
