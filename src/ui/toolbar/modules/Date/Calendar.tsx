@@ -98,14 +98,14 @@ function DateCalendar() {
     localStorage.getItem('gcal_token'),
   );
   const tokenClientRef = useRef<any>();
+  const handleAuth = () => {
+    if (!process.env.GCAL_CLIENT_ID) {
+      return;
+    }
 
-  useEffect(() => {
-    const onLoad = () => {
-      if (!process.env.GCAL_CLIENT_ID) {
-        return;
-      }
+    const initClient = () => {
       tokenClientRef.current = window.google?.accounts?.oauth2.initTokenClient({
-        client_id: process.env.GCAL_CLIENT_ID,
+        client_id: process.env.GCAL_CLIENT_ID!,
         scope: 'https://www.googleapis.com/auth/calendar.readonly',
         callback: (res: any) => {
           const access = res.access_token as string;
@@ -113,21 +113,24 @@ function DateCalendar() {
           setToken(access);
         },
       });
+      tokenClientRef.current.requestAccessToken({ prompt: 'consent' });
     };
 
-    if (window.google?.accounts?.oauth2) {
-      onLoad();
+    if (tokenClientRef.current) {
+      tokenClientRef.current.requestAccessToken({ prompt: 'consent' });
       return;
     }
+
+    if (window.google?.accounts?.oauth2) {
+      initClient();
+      return;
+    }
+
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
-    script.onload = onLoad;
+    script.onload = initClient;
     document.body.appendChild(script);
-  }, []);
-
-  const handleAuth = () => {
-    tokenClientRef.current?.requestAccessToken({ prompt: 'consent' });
   };
 
   useEffect(() => {
