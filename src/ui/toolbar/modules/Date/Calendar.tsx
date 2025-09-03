@@ -97,15 +97,17 @@ function DateCalendar() {
   const [token, setToken] = useState<string | null>(() =>
     localStorage.getItem('gcal_token'),
   );
+  const clientId = process.env.GCAL_CLIENT_ID;
   const tokenClientRef = useRef<any>();
   const handleAuth = () => {
-    if (!process.env.GCAL_CLIENT_ID) {
+    if (!clientId) {
+      console.warn('GCAL_CLIENT_ID is not configured');
       return;
     }
 
     const initClient = () => {
       tokenClientRef.current = window.google?.accounts?.oauth2.initTokenClient({
-        client_id: process.env.GCAL_CLIENT_ID!,
+        client_id: clientId,
         scope: 'https://www.googleapis.com/auth/calendar.readonly',
         callback: (res: any) => {
           const access = res.access_token as string;
@@ -208,9 +210,15 @@ function DateCalendar() {
     >
       {!token ? (
         <div className="calendar-auth">
-          <button className="calendar-auth-button" onClick={handleAuth}>
-            Connect Google Calendar
-          </button>
+          {clientId ? (
+            <button className="calendar-auth-button" onClick={handleAuth}>
+              Connect Google Calendar
+            </button>
+          ) : (
+            <span className="calendar-auth-missing">
+              Google Calendar unavailable
+            </span>
+          )}
         </div>
       ) : (
         <div onWheel={onWheel}>
