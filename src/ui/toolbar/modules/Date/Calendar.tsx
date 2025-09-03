@@ -93,6 +93,47 @@ function DateCalendar() {
 
   const [date, setDate] = useState(moment().locale(i18n.language));
   const [viewMode, setViewMode] = useState<CalendarMode | undefined>('month');
+  const [events, setEvents] = useState<Record<string, any[]>>({});
+
+  useEffect(() => {
+    const token = localStorage.getItem('gcal_token');
+    if (!token) {
+      setEvents({});
+      return;
+    }
+
+    async function fetchEvents() {
+      try {
+        const timeMin = date.clone().startOf('month').startOf('day').toISOString();
+        const timeMax = date.clone().endOf('month').endOf('day').toISOString();
+        const res = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&timeMin=${encodeURIComponent(
+            timeMin,
+          )}&timeMax=${encodeURIComponent(timeMax)}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+        const data = await res.json();
+        const grouped: Record<string, any[]> = {};
+        for (const item of data.items || []) {
+          const when = item.start?.dateTime || item.start?.date;
+          if (!when) continue;
+          const key = moment(when).format('YYYY-MM-DD');
+          if (!grouped[key]) {
+            grouped[key] = [];
+          }
+          grouped[key]!.push(item);
+        }
+        setEvents(grouped);
+      } catch (err) {
+        console.error('Failed to load calendar events', err);
+        setEvents({});
+      }
+    }
+
+    fetchEvents();
+  }, [date, i18n.language]);
 
   useEffect(() => {
     setDate(date.locale(i18n.language));
@@ -148,6 +189,9 @@ function DateCalendar() {
                 onClick={() => setDate(current)}
               >
                 {Number(current.format('DD'))}
+                {events[current.format('YYYY-MM-DD')] && (
+                  <div className="calendar-event-indicator" />
+                )}
               </div>
             ) : (
               <div
@@ -166,6 +210,18 @@ function DateCalendar() {
             )
           }
         />
+        {(() => {
+          const dayEvents = events[date.format('YYYY-MM-DD')] || [];
+          return (
+            dayEvents.length > 0 && (
+              <ul className="calendar-events-list">
+                {dayEvents.map((ev) => (
+                  <li key={ev.id || ev.summary}>{ev.summary}</li>
+                ))}
+              </ul>
+            )
+          );
+        })()}
       </div>
     </BackgroundByLayersV2>
   );
